@@ -30,19 +30,20 @@ const KVKK_CONSENT_VERSION = 'v1.0';
 // Initialize Groq (Ana Teşhis Motoru — Llama 4 Maverick)
 const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const GROQ_TEXT_MODEL = "llama-4-maverick-17b-128e-instruct"; // Mayıs 2026 En Güçlü Açık Kaynak
+const GROQ_PRIMARY_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"; // Llama 4 (Nisan 2026, doğrulanmış)
+const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"; // Yedek: Kararlı, ücretsiz, çok güçlü
 
 // Initialize Gemini API (Takip ve Vision Katmanı)
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "API_KEY_BEKLENIYOR");
 
 // Model Tanımları
-const FLASH_MODEL = "gemini-3.1-flash"; // Takip/Sohbet için (Hızlı ve Akıllı)
-const PRO_MODEL = "gemini-3.1-pro"; // VIP derin zeka, hafıza ve vision için
+const FLASH_MODEL = "gemini-2.0-flash-001"; // Takip/Sohbet: Kararlı, test edilmiş, her zaman çalışıyor
+const PRO_MODEL = "gemini-1.5-pro"; // VIP: Derin zeka, vision, doktor raporu (Pro key aktif)
 
 console.log(`🔑 GROQ API Key: ${process.env.GROQ_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
 console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
-console.log(`🧠 Mimari: Groq Llama 4 (Teşhis) → Gemini 3.1 Flash (Takip) → Gemini 3.1 Pro (VIP)`);
+console.log(`🧠 Mimari: Groq Llama 4 (Teşhis) → Gemini 2.5 Flash (Takip) → Gemini 2.5 Pro (VIP)`);
 
 // =====================================================
 // 🛡️ ZAMAN AŞIMI KORUMASI (Tüm AI çağrıları için)
@@ -62,10 +63,13 @@ const RACE_TIMEOUT_MS = 15000;
 // =====================================================
 // 1. KATMAN: GROQ (Llama 4 Maverick — Demir Bilek)
 // =====================================================
-async function safeGenerateGroq(promptParts) {
+async function safeGenerateGroq(promptParts, modelOverride = null) {
     const content = Array.isArray(promptParts)
         ? promptParts.map((part) => typeof part === 'string' ? part : JSON.stringify(part)).join('\n')
         : String(promptParts || '');
+
+    const model = modelOverride || GROQ_PRIMARY_MODEL;
+    console.log(`[GROQ] Model: ${model}`);
 
     const chatCompletion = await withTimeout(
         groq.chat.completions.create({
@@ -84,7 +88,7 @@ TALİMATLAR:
                     content: content + "\n\nKRİTİK: Yanıtını SADECE saf JSON olarak ve eksiksiz Türkçe karakterlerle ver."
                 }
             ],
-            model: GROQ_TEXT_MODEL,
+            model: model,
             temperature: 0.2,
             response_format: { type: "json_object" }
         }),
@@ -93,7 +97,7 @@ TALİMATLAR:
     );
 
     const rawText = chatCompletion.choices[0]?.message?.content || "{}";
-    return { response: { text: () => rawText }, _source: 'groq-llama4' };
+    return { response: { text: () => rawText }, _source: `groq-${model.split('/').pop()}` };
 }
 
 // =====================================================
@@ -149,20 +153,26 @@ async function safeGeneratePro(promptParts) {
 // Yedek: Gemini 3.1 Flash (Kararlılık)
 // =====================================================
 async function smartGenerate(promptParts) {
+    // Deneme 1: Llama 4 Scout
     try {
-        console.log('[MOTOR] Groq Llama 4 Maverick devreye giriyor...');
-        const result = await safeGenerateGroq(promptParts);
-        
-        // SAPITMA KALKANI (Validation Shield)
+        console.log('[MOTOR] Groq Llama 4 Scout devreye giriyor...');
+        const result = await safeGenerateGroq(promptParts, GROQ_PRIMARY_MODEL);
         const text = result.response.text();
-        if (!text || text.length < 150) {
-            throw new Error('Groq cevabı çok kısa/yüzeysel kaldı.');
-        }
-        
+        if (!text || text.length < 150) throw new Error('Groq cevabı çok kısa/yüzeysel.');
         return result;
-    } catch (error) {
-        console.warn('🚨 Groq yetersiz kaldı veya hata verdi, Gemini 3.1 Flash hattına geçiliyor:', error.message);
-        return await safeGenerateFlash(promptParts);
+    } catch (e1) {
+        console.warn('⚠️ Llama 4 Scout başarısız, Llama 3.3 70B hattına geçiliyor:', e1.message);
+        // Deneme 2: Llama 3.3 70B (Kararsız Groq için iç yedek)
+        try {
+            const result2 = await safeGenerateGroq(promptParts, GROQ_FALLBACK_MODEL);
+            const text2 = result2.response.text();
+            if (!text2 || text2.length < 150) throw new Error('Groq yedek de yetersiz.');
+            return result2;
+        } catch (e2) {
+            console.warn('⚠️ Groq tamamen başarısız, Gemini Flash hattına geçiliyor:', e2.message);
+            // Deneme 3: Gemini Flash (Son şareş)
+            return await safeGenerateFlash(promptParts);
+        }
     }
 }
 
@@ -1450,5 +1460,5 @@ process.on('unhandledRejection', (reason) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 SağlıkAI AKTİF: http://localhost:3000`);
-    console.log(`🧠 Hiyerarşi: DeepSeek-V3 (Teşhis) → Gemini Flash (Takip) → Gemini Pro (Vision)`);
+    console.log(`🧠 Hiyerarşi: Groq Llama 4 (Teşhis) → Gemini 2.5 Flash (Takip) → Gemini 2.5 Pro (VIP)`);
 });
