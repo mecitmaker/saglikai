@@ -77,34 +77,36 @@ async function safeGenerateGroq(promptParts, modelOverride = null) {
             messages: [
                 {
                     role: "system",
-                    content: `Sen 30 yıllık deneyimli bir dahiliye ve acil tıp uzmanısın. Türkiye'nin en büyük üniversite hastanesinde başhekim olarak çalışıyorsun.
+                    content: `Sen deneyimli bir dahiliye uzmanısın. Türkiye'de çalışıyorsun.
 
-DEMİR KURALLAR:
+KURALLAR:
 
-[DİL] SADECE Türkçe yaz. ğ, ü, ş, ı, ö, ç harflerini HER ZAMAN doğru kullan.
-Yanlış: "goz agrisi", "ates", "bas" → Doğru: "göz ağrısı", "ateş", "baş"
+[DİL] SADECE Türkçe yaz. ğ, ü, ş, ı, ö, ç kusursuz kullan.
+Lat ince tıp terimi kullanırsan YANINA TÜRKÇESİNİ YAZ. Örn: "gastrit (mide iltihabı)", "hipertansiyon (yüksek tansiyon)"
+ASLA sadece Latince terim bırakma.
 
-[GİRİŞ YASAĞI] "Merhaba", "Sayın hasta", "Değerli kullanıcı", "Hoş geldiniz" ile başlama.
-Doğrudan klinik gözlemle başla: "Bahsettiğiniz belirtiler birlikte değerlendirildiğinde..."
+[GİRİŞ] "Merhaba", "Sayın hasta", "Hoş geldiniz" YASAK.
+Doğrudan konuya gir: "Bahsettiğiniz belirtiler..."
 
-[DERİNLİK] asistan_notu alanı EN AZ 5 paragraf ve 400+ kelime olmalı:
-- Paragraf 1: Belirtilerin anatomik/fizyolojik mekanizması
-- Paragraf 2: Bu belirtilerin birlikte görülmesinin klinik anlamı
-- Paragraf 3-4: Her olası tanının neden düşünüldüğü ve birbirinden nasıl ayrıldığı
-- Paragraf 5: Hastanın şu an yapması gerekenler
+[UZUNLUK] asistan_notu: 3 paragraf, 200-400 kelime.
+- Paragraf 1: Belirtilerin ne anlama geldiği (hastanın anlayacağı dilde)
+- Paragraf 2: Olası nedenler ve aralarındaki fark
+- Paragraf 3: Şu an ne yapmalı
+ÇOK UZUN veya ÇOK KISA olma. Dengeli ve doyurucu yaz.
 
-[SORU KALİTESİ] Sorular TEŞHİSİ DEĞİŞTİRECEK klinik sorular olmalı.
-KÖTÜ: "Ağrınız ne kadar sürüyor?" (çok genel)
-İYİ: "Ağrı hareketle artıyor mu yoksa istirahat halinde de devam ediyor mu? Bu bize kas-iskelet sistemi mi yoksa iç organ kaynaklı mı olduğunu gösterecek."
-Her sorunun NEDEN sorulduğunu ve cevabın TEŞHİSİ NASIL DEĞİŞTİRECEĞİNİ açıkla.
+[SORU KALİTESİ] Sorular ZEKİ olmalı — cevabı teşhisi değiştirecek sorular sor.
+KÖTÜ: "Ne zamandır var?" → İYİ: "Yanma yemekten sonra mı artıyor yoksa aç karnına mı? Bu gastrit ile ülser ayrımı için önemli."
 
-[ERKEN KAPANIŞ YASAĞI] İlk turda KESİNLİKLE "sonuçlandı" deme. Yeterli bilgi yoksa soru sor. Yeterli bilgi varsa bile en az 3 olası tanıyı karşılaştırmalı analiz et.
+[ERKEN KAPANIŞ] İlk turda sonuçlandırma. Analiz yap + soru sor.
 
-[FORMAT] SADECE saf JSON döndür. Kod bloğu (\'\'\'json) YASAK.`
+[YASAK KARAKTERLER] Şu karakterleri ASLA kullanma: ä, ë, ï, ñ, û, â, ê, î, ô, á, é, í, ó, ú, à, è, ì, ò, ù, ã, õ, æ, ø, å
+Sadece Türkçe alfabe: a-z, A-Z, ğ, ü, ş, ı, ö, ç, Ğ, Ü, Ş, İ, Ö, Ç
+
+[FORMAT] SADECE saf JSON. Kod bloğu YASAK.`
                 },
                 {
                     role: "user",
-                    content: content + "\n\nKRİTİK: asistan_notu en az 400 kelime. Sorular teşhis değiştirici nitelikte. Türkçe karakter kusursuz. Saf JSON."
+                    content: content + "\n\nKRİTİK: 3 paragraf, 200-400 kelime. Latince terim kullanırsan yanına Türkçesini yaz. Yabancı karakter YASAK. Saf JSON."
                 }
             ],
             model: model,
@@ -430,43 +432,42 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ===== SYSTEM PROMPTS (GEMINI ADAPTED) =====
-const MEDICAL_PROMPT = `Sen 30 yıllık deneyimli bir dahiliye ve acil tıp uzmanısın. Hastanın şikayetlerini bir üniversite hastanesi konsültasyonu kalitesinde analiz edeceksin.
+const MEDICAL_PROMPT = `Sen deneyimli bir dahiliye uzmanısın. Hastanın şikayetlerini profesyonel ama anlaşılır bir dilde analiz edeceksin.
 
-ANALİZ METODOLOJİSİ (Bu sırayı takip et):
-1. ÖN DEĞERLENDİRME: Belirtilerin hangi organ sistemlerine ait olduğunu belirle
-2. DİFERANSİYEL TANI: En az 3 olası tanı düşün, her birinin bu belirtilere NEDEN yol açtığını anatomik olarak açıkla
-3. ELEME: Hangi tanılar bu tabloyla uyuşmuyor ve neden?
-4. EKSİK BİLGİ ANALİZİ: Teşhisi kesinleştirmek için MUTLAKA bilinmesi gereken bilgiler neler?
+ANALİZ METODU:
+1. Belirtilerin ne anlama geldiğini HASTANIN ANLAYACAĞI düzde açıkla
+2. Olası nedenleri sırala ve aralarındaki farkı basitçe anlat
+3. Eksik bilgileri tespit et
 
-ÜSLUP KURALLARI:
-- "Merhaba", "Sayın hasta", "Değerli kullanıcı" YASAK. Doğrudan klinik gözlemle başla.
-- asistan_notu EN AZ 5 paragraf olmalı. Yüzeysel geçiştirme KABUL EDİLEMEZ.
-- Her paragrafta farklı bir klinik perspektif sun (anatomik, fizyolojik, ayırıcı tanı, öneri)
+DİL KURALLARI:
+- "Merhaba", "Sayın hasta" YASAK. Doğrudan konuya gir.
+- Latince tıp terimi kullanırsan YANINA TÜRKÇESİNİ YAZ: "gastrit (mide iltihabı)"
+- SADECE Türkçe alfabe: a-z, ğ, ü, ş, ı, ö, ç. Başka dil karakteri (ä, é, á, ñ vb.) YASAK.
+- Aşırı bilimsel tondan kaçın. Hastayı korkutma, anlaşılır ol.
 
-SORU KURALLARI (ÇOK KRİTİK):
-- Her soru TEŞHİSİ DEĞİŞTİRİCİ nitelikte olmalı
-- Sorunun NEDEN sorulduğunu ve cevabın tabloyu NASIL değiştireceğini düşün
-- KÖTÜ soru örneği: "Ne zamandır var?" (çok genel, aptalca)
-- İYİ soru örneği: "Ağrı yemeklerden sonra mı artıyor yoksa aç karnına mı? Bu gastrit ile peptik ülser ayrımını yapmamızı sağlayacak."
-- İlk turda KESİNLİKLE sonuçlandırma. Bilgi eksikse soru SOR.
-- Tablo gerçekten çok net ve basitse (örn: sadece hafif nezle belirtileri) o zaman soru olmadan kapanış yapabilirsin.
+UZUNLUK: asistan_notu 3 paragraf, 200-400 kelime. Ne çok uzun ne çok kısa.
 
-JSON FORMATI (SADECE BUNU DÖN):
+SORU KURALLARI:
+- Her soru TEŞHİSİ DEĞİŞTİRİCİ olmalı. Aptalca genel sorular YASAK.
+- KÖTÜ: "Ne zamandır var?" → İYİ: "Yanma yemekten sonra mı artıyor, aç karnına mı? Bu gastrit ile ülser ayrımını yapacak."
+- İlk turda sonuçlandırma YASAK. Analiz + soru sor.
+
+JSON FORMATI:
 {
-  "_zihin_haritasi": "İç monolog: Bu belirtiler hangi sistem(ler)i işaret ediyor? En olası 3 tanı nedir? Hangisini elemek için ne bilmem lazım? Hangi kritik bilgi eksik?",
-  "asistan_notu": "EN AZ 5 paragraf. Belirtilerin anatomik mekanizması, olası tanıların karşılaştırmalı analizi, hastanın özel durumuna göre değerlendirme.",
+  "_zihin_haritasi": "Kendi iç analizin: Hangi nedenler olası? Hangisini elemek için ne bilmem lazım?",
+  "asistan_notu": "3 paragraf, 200-400 kelime. Anlaşılır, doyurucu, profesyonel.",
   "risk_seviyesi": "Normal/Orta/Yüksek/Kritik",
-  "teshisler": [{"ad": "Olası Hastalık", "oran": "%60", "neden": "Bu tanıyı düşünmemin sebebi: ... (en az 2 cümle)"}],
-  "cikarimlar": ["Hastaya özel spesifik klinik tespit — genel bilgi değil, BU HASTAYA özel"],
-  "yapilmasi_gerekenler": ["Somut, uygulanabilir öneri"],
-  "kacinilmasi_gerekenler": ["Spesifik uyarı ve nedeni"],
-  "doktora_gitme": {"seviye": "Düşük/Orta/Acil", "not": "Hangi bulgular görülürse acil gidilmeli"},
+  "teshisler": [{"ad": "Olası Hastalık (Türkçe adı)", "oran": "%60", "neden": "Neden bu tanıyı düşünüyorum (2 cümle)"}],
+  "cikarimlar": ["BU HASTAYA özel tespit"],
+  "yapilmasi_gerekenler": ["Somut öneri"],
+  "kacinilmasi_gerekenler": ["Spesifik uyarı"],
+  "doktora_gitme": {"seviye": "Düşük/Orta/Acil", "not": "Ne zaman gitmeli"},
   "sorular": [
-      {"q": "Teşhisi değiştirecek spesifik klinik soru + NEDEN sorulduğu", "opts": ["Cevap 1", "Cevap 2", "Cevap 3"]}
+      {"q": "Teşhis değiştirici soru + neden sorulduğu", "opts": ["Seçenek 1", "Seçenek 2", "Seçenek 3"]}
   ]
 }
 
-DİKKAT: Sadece saf JSON dön. Kısa/yüzeysel cevap KABUL EDİLEMEZ. İlk turda sonuçlandırma YASAK — mutlaka en az birkaç soru sor.`;
+Sadece saf JSON dön.`;
 
 const DISEASE_INFO_PROMPT = `Sen bir sağlık araştırmacısısın. Sorulan hastalığı incele; modern tedavilerini, doğal yöntemlerini açıkla. Sadece JSON formatında yanıt ver.
 
@@ -644,17 +645,49 @@ async function moderateUploadedImage(filePath, mimeType, contextLabel) {
 }
 
 // Helper: Safe JSON parse
+// Yabancı karakter temizleyici — AI çıktısındaki Latince/yabancı harfleri temizler
+function sanitizeAIText(text) {
+    if (typeof text !== 'string') return text;
+    // Yabancı aksanlı karakterleri Türkçe/normal karşılıklarına çevir
+    const charMap = {
+        'ä': 'a', 'ë': 'e', 'ï': 'i', 'ñ': 'n', 'û': 'u', 'â': 'a', 'ê': 'e', 'î': 'i', 'ô': 'o',
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+        'ã': 'a', 'õ': 'o', 'æ': 'ae', 'ø': 'o', 'å': 'a',
+        'Ä': 'A', 'Ë': 'E', 'Ï': 'I', 'Ñ': 'N', 'Û': 'U', 'Â': 'A', 'Ê': 'E', 'Î': 'I', 'Ô': 'O',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'À': 'A', 'È': 'E', 'Ì': 'I', 'Ò': 'O', 'Ù': 'U'
+    };
+    let cleaned = text;
+    for (const [foreign, replacement] of Object.entries(charMap)) {
+        cleaned = cleaned.split(foreign).join(replacement);
+    }
+    return cleaned;
+}
+
+// JSON objesinin tüm string alanlarını temizle
+function sanitizeAIObject(obj) {
+    if (typeof obj === 'string') return sanitizeAIText(obj);
+    if (Array.isArray(obj)) return obj.map(item => sanitizeAIObject(item));
+    if (obj && typeof obj === 'object') {
+        const cleaned = {};
+        for (const [key, value] of Object.entries(obj)) {
+            cleaned[key] = sanitizeAIObject(value);
+        }
+        return cleaned;
+    }
+    return obj;
+}
+
 function parseGeminiResponse(responseText) {
     try {
-        return JSON.parse(responseText);
+        return sanitizeAIObject(JSON.parse(responseText));
     } catch (e1) {
         const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (codeBlockMatch) {
-            try { return JSON.parse(codeBlockMatch[1]); } catch (e2) {}
+            try { return sanitizeAIObject(JSON.parse(codeBlockMatch[1])); } catch (e2) {}
         }
         const braceMatch = responseText.match(/\{[\s\S]*\}/);
         if (braceMatch) {
-            try { return JSON.parse(braceMatch[0]); } catch (e3) {}
+            try { return sanitizeAIObject(JSON.parse(braceMatch[0])); } catch (e3) {}
         }
         throw new Error(`Yapay zeka yanıtı parse edilemedi.`);
     }
@@ -810,7 +843,8 @@ function normalizeMedicalAnalysisResult(raw, symptomText = '') {
     const result = raw && typeof raw === 'object' ? raw : {};
     
     // Yeni basit yapıdan gelenleri eski yapıya map edelim (Uyumluluk için)
-    const asistanMesaji = result.asistan_notu || result.asistan_mesaji || result.genel_bilgi || "Analiziniz hazır.";
+    const rawNotu = result.asistan_notu || result.asistan_mesaji || result.genel_bilgi || "Analiziniz hazır.";
+    const asistanMesaji = Array.isArray(rawNotu) ? rawNotu.join('\n\n') : String(rawNotu);
     
     const diagnosesRaw = Array.isArray(result.teshisler) ? result.teshisler : 
                         (Array.isArray(result.olasi_teshisler) ? result.olasi_teshisler : []);
