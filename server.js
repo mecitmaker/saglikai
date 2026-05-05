@@ -27,25 +27,22 @@ try {
 }
 const KVKK_CONSENT_VERSION = 'v1.0';
 
-// Initialize DeepSeek (Ana Teşhis Motoru — V3)
-const OpenAI = require('openai');
-const deepseek = new OpenAI({
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: 'https://api.deepseek.com'
-});
-const DEEPSEEK_MODEL = "deepseek-chat"; // DeepSeek-V3 (En Güncel)
+// Initialize Groq (Ana Teşhis Motoru — Llama 4 Maverick)
+const Groq = require('groq-sdk');
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const GROQ_TEXT_MODEL = "llama-4-maverick-17b-128e-instruct"; // Mayıs 2026 En Güçlü Açık Kaynak
 
 // Initialize Gemini API (Takip ve Vision Katmanı)
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "API_KEY_BEKLENIYOR");
 
 // Model Tanımları
-const FLASH_MODEL = "gemini-2.0-flash"; // Takip/Sohbet için (Hızlı ve Akıllı)
-const PRO_MODEL = "gemini-1.5-pro"; // VIP derin zeka, hafıza ve vision için
+const FLASH_MODEL = "gemini-3.1-flash"; // Takip/Sohbet için (Hızlı ve Akıllı)
+const PRO_MODEL = "gemini-3.1-pro"; // VIP derin zeka, hafıza ve vision için
 
-console.log(`🔑 DeepSeek API Key: ${process.env.DEEPSEEK_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
+console.log(`🔑 GROQ API Key: ${process.env.GROQ_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
 console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
-console.log(`🧠 Hiyerarşi: DeepSeek-V3 (Teşhis) → Gemini Flash (Takip/Sohbet) → Gemini Pro (VIP/Vision)`);
+console.log(`🧠 Mimari: Groq Llama 4 (Teşhis) → Gemini 3.1 Flash (Takip) → Gemini 3.1 Pro (VIP)`);
 
 // =====================================================
 // 🛡️ ZAMAN AŞIMI KORUMASI (Tüm AI çağrıları için)
@@ -63,35 +60,40 @@ const AI_TIMEOUT_MS = 20000;  // 20 saniye — DeepSeek için biraz daha geniş
 const RACE_TIMEOUT_MS = 15000;
 
 // =====================================================
-// 1. KATMAN: DEEPSEEK-V3 (Ana Teşhis Motoru — Derin Zeka)
+// 1. KATMAN: GROQ (Llama 4 Maverick — Demir Bilek)
 // =====================================================
-async function safeGenerateDeepSeek(promptParts) {
+async function safeGenerateGroq(promptParts) {
     const content = Array.isArray(promptParts)
         ? promptParts.map((part) => typeof part === 'string' ? part : JSON.stringify(part)).join('\n')
         : String(promptParts || '');
 
-    const completion = await withTimeout(
-        deepseek.chat.completions.create({
-            model: DEEPSEEK_MODEL,
+    const chatCompletion = await withTimeout(
+        groq.chat.completions.create({
             messages: [
                 {
                     role: "system",
-                    content: "Sen SADECE TÜRKÇE konuşan, dünyaca ünlü bir klinik başhekimisin. Tüm yanıtların kurallı, eksiksiz ve saf bir JSON olmalıdır. Markdown (```json) veya normal metin KULLANMA. Sadece ham JSON döndür."
+                    content: `Sen dünyanın en iyi klinik başhekimisin. 
+TALİMATLAR:
+1. SADECE TÜRKÇE konuş. "ç, ş, ğ, ı, ö, ü" karakterlerini kusursuz kullan.
+2. Derinlik: Yüzeysel cevap verme. Anatomik bağlantıları açıkla.
+3. Format: SADECE ham JSON döndür. Markdown (code blocks) YASAK.
+4. Hitap: "Sayın hasta" deme. Doğrudan ve profesyonel gir.`
                 },
                 {
                     role: "user",
-                    content: content + "\n\nKRİTİK TALİMAT: Yanıtını %100 geçerli JSON formatında ve KESİNLİKLE SADECE TÜRKÇE olarak ver."
+                    content: content + "\n\nKRİTİK: Yanıtını SADECE saf JSON olarak ve eksiksiz Türkçe karakterlerle ver."
                 }
             ],
-            temperature: 0.3,
+            model: GROQ_TEXT_MODEL,
+            temperature: 0.2,
             response_format: { type: "json_object" }
         }),
         AI_TIMEOUT_MS,
-        'DeepSeek'
+        'Groq'
     );
 
-    const rawText = completion.choices[0]?.message?.content || "{}";
-    return { response: { text: () => rawText }, _source: 'deepseek-v3' };
+    const rawText = chatCompletion.choices[0]?.message?.content || "{}";
+    return { response: { text: () => rawText }, _source: 'groq-llama4' };
 }
 
 // =====================================================
@@ -142,17 +144,24 @@ async function safeGeneratePro(promptParts) {
 }
 
 // =====================================================
-// ⚡ AKILLI KATMAN MOTORU
-// Ana Teşhis: DeepSeek-V3 (Derin Zeka)
-// Takip/Sohbet: Gemini Flash (Hız + Bağlam)
-// Yedek: Gemini Flash (DeepSeek çökerse)
+// ⚡ AKILLI KATMAN MOTORU (Validation Shield Entegre)
+// Ana: Groq Llama 4 (Hız + Ücretsiz)
+// Yedek: Gemini 3.1 Flash (Kararlılık)
 // =====================================================
 async function smartGenerate(promptParts) {
     try {
-        console.log('[MOTOR] DeepSeek-V3 devreye giriyor...');
-        return await safeGenerateDeepSeek(promptParts);
+        console.log('[MOTOR] Groq Llama 4 Maverick devreye giriyor...');
+        const result = await safeGenerateGroq(promptParts);
+        
+        // SAPITMA KALKANI (Validation Shield)
+        const text = result.response.text();
+        if (!text || text.length < 150) {
+            throw new Error('Groq cevabı çok kısa/yüzeysel kaldı.');
+        }
+        
+        return result;
     } catch (error) {
-        console.error('🚨 DeepSeek hata verdi, Gemini Flash yedek hattına geçiliyor:', error.message);
+        console.warn('🚨 Groq yetersiz kaldı veya hata verdi, Gemini 3.1 Flash hattına geçiliyor:', error.message);
         return await safeGenerateFlash(promptParts);
     }
 }
