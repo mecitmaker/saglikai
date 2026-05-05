@@ -27,11 +27,12 @@ try {
 }
 const KVKK_CONSENT_VERSION = 'v1.0';
 
-// Initialize Groq (Ana Teşhis Motoru — Llama 4 Maverick)
+// Initialize Groq (Tüm AI Katmanları — Bedava + Güçlü)
 const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const GROQ_PRIMARY_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"; // Llama 4 (Nisan 2026, doğrulanmış)
-const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"; // Yedek: Kararlı, ücretsiz, çok güçlü
+const GROQ_PRIMARY_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"; // Katman 1: Hızlı Teşhis
+const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"; // Katman 1 Yedeği
+const GROQ_THINKING_MODEL = "qwen/qwen3-32b"; // Katman 2: Derin Analiz + Takip (Thinking Mode)
 
 // Initialize Gemini API (Takip ve Vision Katmanı)
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -42,8 +43,8 @@ const FLASH_MODEL = "gemini-2.0-flash-001"; // Takip/Sohbet: Kararlı, test edil
 const PRO_MODEL = "gemini-1.5-pro"; // VIP: Derin zeka, vision, doktor raporu (Pro key aktif)
 
 console.log(`🔑 GROQ API Key: ${process.env.GROQ_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
-console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? 'Yüklü ✅' : 'Eksik ❌'}`);
-console.log(`🧠 Mimari: Groq Llama 4 (Teşhis) → Gemini 2.5 Flash (Takip) → Gemini 2.5 Pro (VIP)`);
+console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? 'Yüklü ✅ (Sadece Vision)' : 'Eksik ❌'}`);
+console.log(`🧠 Mimari: Llama 4 Scout (Teşhis) → Qwen3-32b Thinking (Takip) → Gemini Pro (Vision)`);
 
 // =====================================================
 // 🛡️ ZAMAN AŞIMI KORUMASI (Tüm AI çağrıları için)
@@ -101,7 +102,47 @@ TALİMATLAR:
 }
 
 // =====================================================
-// 2. KATMAN: GEMINI FLASH (Akıllı Ara İşlemler)
+// 2. KATMAN: QWEN3-32B (Thinking Mode — Derin Takip)
+// =====================================================
+async function safeGenerateQwen(promptParts, useThinking = true) {
+    const content = Array.isArray(promptParts)
+        ? promptParts.map((part) => typeof part === 'string' ? part : JSON.stringify(part)).join('\n')
+        : String(promptParts || '');
+
+    console.log(`[GROQ] Model: ${GROQ_THINKING_MODEL} (thinking: ${useThinking})`);
+
+    const chatCompletion = await withTimeout(
+        groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: `Sen dünyanın en iyi klinik başhekimisin. Analiz yapmadan önce çok derin düşün.
+TALİMATLAR:
+1. SADECE TÜRKÇE konuş. "ç, ş, ğ, ı, ö, ü" karakterlerini kusursuz kullan.
+2. Derinlik: Anatomik ve fizyolojik bağlantıları açıkla.
+3. Format: SADECE ham JSON döndür. Markdown YASAK.
+4. Hitap: "Sayın hasta" deme. Doğrudan ve profesyonel gir.`
+                },
+                {
+                    role: "user",
+                    content: content + "\n\nKRİTİK: Yanıtını SADECE saf JSON ve Türkçe karakterlerle ver."
+                }
+            ],
+            model: GROQ_THINKING_MODEL,
+            temperature: 0.6,
+            ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 2048 } } : {}),
+            response_format: { type: "json_object" }
+        }),
+        30000, // Thinking mode için 30 sn
+        'Qwen3'
+    );
+
+    const rawText = chatCompletion.choices[0]?.message?.content || "{}";
+    return { response: { text: () => rawText }, _source: 'groq-qwen3-thinking' };
+}
+
+// =====================================================
+// 3. KATMAN: GEMINI FLASH (Acil Yedek — Sadece Groq'un tümü çökerse)
 // =====================================================
 async function safeGenerateFlash(promptParts) {
     const model = genAI.getGenerativeModel({ model: FLASH_MODEL });
@@ -148,9 +189,10 @@ async function safeGeneratePro(promptParts) {
 }
 
 // =====================================================
-// ⚡ AKILLI KATMAN MOTORU (Validation Shield Entegre)
-// Ana: Groq Llama 4 (Hız + Ücretsiz)
-// Yedek: Gemini 3.1 Flash (Kararlılık)
+// ⚡ AKILLI KATMAN MOTORU (3 Katmanlı Groq Zinciri)
+// Katman 1: Llama 4 Scout (Hızlı teşhis)
+// Katman 2: Llama 3.3 70B (Yedek)
+// Katman 3 (Geri düşüş): Qwen3 Thinking
 // =====================================================
 async function smartGenerate(promptParts) {
     // Deneme 1: Llama 4 Scout
@@ -162,17 +204,28 @@ async function smartGenerate(promptParts) {
         return result;
     } catch (e1) {
         console.warn('⚠️ Llama 4 Scout başarısız, Llama 3.3 70B hattına geçiliyor:', e1.message);
-        // Deneme 2: Llama 3.3 70B (Kararsız Groq için iç yedek)
+        // Deneme 2: Llama 3.3 70B
         try {
             const result2 = await safeGenerateGroq(promptParts, GROQ_FALLBACK_MODEL);
             const text2 = result2.response.text();
             if (!text2 || text2.length < 150) throw new Error('Groq yedek de yetersiz.');
             return result2;
         } catch (e2) {
-            console.warn('⚠️ Groq tamamen başarısız, Gemini Flash hattına geçiliyor:', e2.message);
-            // Deneme 3: Gemini Flash (Son şareş)
-            return await safeGenerateFlash(promptParts);
+            console.warn('⚠️ Groq tamamen başarısız, Qwen3 Thinking hattına geçiliyor:', e2.message);
+            // Deneme 3: Qwen3 (Thinking kapalı — JSON uyumluluğu için)
+            return await safeGenerateQwen(promptParts, false);
         }
+    }
+}
+
+// Takip/Sohbet için: Doğrudan Qwen3 Thinking
+async function smartGenerateChat(promptParts) {
+    try {
+        console.log('[MOTOR] Qwen3-32b Thinking Mode (Takip) devreye giriyor...');
+        return await safeGenerateQwen(promptParts, true);
+    } catch (err) {
+        console.warn('⚠️ Qwen3 başarısız, Llama 3.3 70B yedeğine geçiliyor:', err.message);
+        return await safeGenerateGroq(promptParts, GROQ_FALLBACK_MODEL);
     }
 }
 
@@ -984,8 +1037,8 @@ app.post('/api/follow-up', requireKvkkConsent, async (req, res) => {
         const prevTeshis = previousResult?.analiz?.teshisler || previousResult?.olasi_teshisler || previousResult?.teshisler || [];
         const contextPrompt = `${FOLLOW_UP_PROMPT}\n\nTÜM GEÇMİŞ BİLGİLER: ${contextString}\nÖnceki teşhisler: ${JSON.stringify(prevTeshis)}`;
         
-        console.log('[FOLLOW-UP] smartGenerate yarışı başlıyor...');
-        const result = await smartGenerate([contextPrompt]);
+        console.log('[FOLLOW-UP] Qwen3 Thinking Mode devreye giriyor...');
+        const result = await smartGenerateChat([contextPrompt]);
         const raw = parseGeminiResponse(result.response.text());
         const normalized = normalizeMedicalAnalysisResult(raw, sanitizeInput(String(originalSymptoms || ''), 500));
 
@@ -1039,7 +1092,8 @@ ${safeHistory.map(msg => `[${msg.sender === 'user' ? 'Kullanıcı' : 'Asistan'}]
 [Kullanıcı]: ${message}`;
 
         console.log("[CHAT-FOLLOWUP] smartGenerate yarışı başlıyor (Groq vs Flash)...");
-        const result = await smartGenerate([contextPrompt]);
+        console.log('[CHAT] Qwen3 Thinking Mode devreye giriyor...');
+        const result = await smartGenerateChat([contextPrompt]);
         console.log(`[CHAT-FOLLOWUP] Yanıt geldi! Kaynak: ${result._source || 'bilinmiyor'}`);
         const data = parseGeminiResponse(result.response.text());
         console.log("[CHAT-FOLLOWUP] Parse başarılı.");
