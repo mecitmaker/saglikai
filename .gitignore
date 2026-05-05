@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+firebase-key.json
+uploads/
+server.log
+test_output.json
+check_models.js
+check_v1.js
+test_html.py
+*.log
+.DS_Store
