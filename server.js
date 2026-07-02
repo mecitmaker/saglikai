@@ -156,7 +156,6 @@ asistan_notu en az 300 kelime olmalı.
             ],
             model: GROQ_THINKING_MODEL,
             temperature: 0.6,
-            ...(useThinking ? { thinking: { type: 'enabled', budget_tokens: 2048 } } : {}),
             response_format: { type: "json_object" }
         }),
         30000, // Thinking mode için 30 sn
@@ -1018,7 +1017,7 @@ app.post('/api/disease-info', async (req, res) => {
     try {
         const disease = sanitizeInput(req.body?.disease, 200);
         if (!disease) return res.status(400).json({ error: 'Hastalık adı gerekli.' });
-        const result = await safeGenerateFlash([DISEASE_INFO_PROMPT, `Hastalık: ${disease}`]);
+        const result = await safeGenerateGroq([DISEASE_INFO_PROMPT, `Hastalık: ${disease}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1032,7 +1031,7 @@ app.post('/api/deep-dive', async (req, res) => {
     try {
         const disease = sanitizeInput(req.body?.disease, 200);
         if (!disease) return res.status(400).json({ error: 'Hastalık adı gerekli.' });
-        const result = await safeGeneratePro([DEEP_DIVE_PROMPT, `Hastalık Teknik Detay: ${disease}`]);
+        const result = await safeGenerateQwen([DEEP_DIVE_PROMPT, `Hastalık Teknik Detay: ${disease}`], true);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1046,7 +1045,7 @@ app.post('/api/analyze-medication', async (req, res) => {
     try {
         const medication = sanitizeInput(req.body?.medication, 200);
         if (!medication) return res.status(400).json({ error: 'İlaç adı gerekli.' });
-        const result = await safeGenerateFlash([MEDICATION_PROMPT, `İlaç: ${medication}`]);
+        const result = await safeGenerateGroq([MEDICATION_PROMPT, `İlaç: ${medication}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1060,7 +1059,7 @@ app.post('/api/analyze-medication', async (req, res) => {
 app.post('/api/doctor-report', async (req, res) => {
     try {
         const { analysis } = req.body;
-        const result = await safeGeneratePro([DOCTOR_REPORT_PROMPT, `Analiz Verisi: ${JSON.stringify(analysis)}`]);
+        const result = await safeGenerateQwen([DOCTOR_REPORT_PROMPT, `Analiz Verisi: ${JSON.stringify(analysis)}`], true);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1110,7 +1109,7 @@ app.post('/api/natural-remedies', async (req, res) => {
     try {
         const symptoms = sanitizeInput(req.body?.symptoms, 500);
         if (!symptoms) return res.status(400).json({ error: 'Belirtiler gerekli.' });
-        const result = await safeGenerateFlash([NATURAL_REMEDY_PROMPT, `Belirtiler:\n${symptoms}`]);
+        const result = await safeGenerateGroq([NATURAL_REMEDY_PROMPT, `Belirtiler:\n${symptoms}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1358,7 +1357,7 @@ app.post('/api/analyze-lab-results', requireKvkkConsent, async (req, res) => {
     try {
         const labText = sanitizeInput(req.body?.labText, 3000);
         if (!labText) return res.status(400).json({ error: 'Tahlil sonuçları gerekli.' });
-        const result = await safeGenerateFlash([LAB_RESULT_PROMPT, `Tahlil Sonuçları:\n${labText}`]);
+        const result = await safeGenerateGroq([LAB_RESULT_PROMPT, `Tahlil Sonuçları:\n${labText}`]);
         const data = parseGeminiResponse(result.response.text());
         
         if (req.user && db) {
@@ -1437,7 +1436,7 @@ app.post('/api/health-profile', requireKvkkConsent, async (req, res) => {
         const profile = req.body?.profile;
         if (!profile) return res.status(400).json({ error: 'Profil bilgileri gerekli.' });
         const profileText = typeof profile === 'string' ? profile : JSON.stringify(profile);
-        const result = await safeGenerateFlash([HEALTH_PROFILE_PROMPT, `Kullanıcı Profili:\n${profileText}`]);
+        const result = await safeGenerateGroq([HEALTH_PROFILE_PROMPT, `Kullanıcı Profili:\n${profileText}`]);
         const data = parseGeminiResponse(result.response.text());
         
         if (req.user && db) {
@@ -1493,7 +1492,7 @@ app.post('/api/drug-interactions', async (req, res) => {
             return res.status(400).json({ error: 'En az 1 ilaç girmelisiniz.' });
         }
         const medList = medications.map(m => sanitizeInput(m, 100)).filter(Boolean).slice(0, 10);
-        const result = await safeGenerateFlash([DRUG_INTERACTION_PROMPT, `İlaçlar: ${medList.join(', ')}`]);
+        const result = await safeGenerateGroq([DRUG_INTERACTION_PROMPT, `İlaçlar: ${medList.join(', ')}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1529,7 +1528,7 @@ app.post('/api/symptom-trend', requireKvkkConsent, async (req, res) => {
             siddet: Math.min(Math.max(parseInt(e.siddet) || 5, 1), 10),
             not: sanitizeInput(e.not || '', 200)
         }));
-        const result = await safeGenerateFlash([SYMPTOM_TREND_PROMPT, `Belirti Kayıtları:\n${JSON.stringify(safeEntries)}`]);
+        const result = await safeGenerateGroq([SYMPTOM_TREND_PROMPT, `Belirti Kayıtları:\n${JSON.stringify(safeEntries)}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1565,7 +1564,7 @@ app.post('/api/mental-health', requireKvkkConsent, async (req, res) => {
         const assessment = req.body?.assessment;
         if (!assessment) return res.status(400).json({ error: 'Değerlendirme bilgisi gerekli.' });
         const assessText = typeof assessment === 'string' ? assessment : JSON.stringify(assessment);
-        const result = await safeGenerateFlash([MENTAL_HEALTH_PROMPT, `Kullanıcı Bilgileri:\n${assessText}`]);
+        const result = await safeGenerateGroq([MENTAL_HEALTH_PROMPT, `Kullanıcı Bilgileri:\n${assessText}`]);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {
@@ -1589,7 +1588,7 @@ Yanıtını SADECE şu JSON formatında dön:
 app.post('/api/elevate-to-pro', requireKvkkConsent, async (req, res) => {
     try {
         const { analysis, symptoms } = req.body;
-        const result = await safeGeneratePro([ELEVATE_PROMPT, `Semptomlar: ${symptoms}\n\nİlk Analiz (Groq/Flash): ${JSON.stringify(analysis)}`]);
+        const result = await safeGenerateQwen([ELEVATE_PROMPT, `Semptomlar: ${symptoms}\n\nİlk Analiz (Groq/Flash): ${JSON.stringify(analysis)}`], true);
         const data = parseGeminiResponse(result.response.text());
         res.json({ success: true, result: data });
     } catch (error) {

@@ -50,8 +50,8 @@ async function runTests() {
     await testEndpoint("4. Psikolojik Destek (Mental Health)", "http://localhost:3000/api/mental-health", { assessment: 'Çok stresliyim, odaklanamıyorum.' });
     await delay(12000);
 
-    // Medication: body: JSON.stringify({ query: ilaçAdı, context: ekBelirti })
-    await testEndpoint("5. İlaç Analizi (Medication Analysis)", "http://localhost:3000/api/analyze-medication", { query: 'Aspirin', context: 'Mide ağrısı' });
+    // Medication: body: JSON.stringify({ medication: ilaçAdı })
+    await testEndpoint("5. İlaç Analizi (Medication Analysis)", "http://localhost:3000/api/analyze-medication", { medication: 'Aspirin' });
 
     console.log("\n==================================================");
     console.log("🏁 TÜM TESTLER TAMAMLANDI.");
