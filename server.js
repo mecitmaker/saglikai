@@ -1218,10 +1218,10 @@ app.get('/api/status', async (req, res) => {
     const hasGemini = !!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('API_KEY_BEKLENIYOR');
     res.json({
         gemini: hasGemini,
-        mode: GROQ_TEXT_MODEL,
+        mode: GROQ_PRIMARY_MODEL,
         flash: FLASH_MODEL,
         pro: PRO_MODEL,
-        status: hasKey ? `Aktif (${GROQ_TEXT_MODEL})` : "GROQ API Anahtarı Eksik",
+        status: hasKey ? `Aktif (${GROQ_PRIMARY_MODEL})` : "GROQ API Anahtarı Eksik",
         gemini_status: hasGemini ? 'Aktif' : 'API Anahtarı Eksik'
     });
 });
