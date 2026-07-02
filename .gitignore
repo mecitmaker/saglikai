@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.*
+!.env.example
 firebase-key.json
 uploads/
 server.log
@@ -10,3 +11,8 @@ check_v1.js
 test_html.py
 *.log
 .DS_Store
+*.pem
+*.p12
+*.key
+*.crt
+secrets/
